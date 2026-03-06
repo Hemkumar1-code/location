@@ -121,10 +121,9 @@ const Admin = () => {
                         style={{ height: '100%', width: '100%' }}
                     >
                         <TileLayer
-                            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>, <a href="https://carto.com/attributions">CARTO</a>'
-                            url='https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-                            subdomains='abcd'
-                            maxZoom={20}
+                            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                            url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+                            maxZoom={19}
                         />
                         {users.map(data => (
                             <Marker

@@ -2,23 +2,60 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const nodemailer = require('nodemailer');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
 const activeUsers = new Map();
+const socketToUser = new Map(); // to track which socket corresponds to which user
+const EMAIL_USER = 'hemk3672@Gmail.com'; // Admin Gmail
+const EMAIL_PASS = 'xppewlvidigowitv';    // App Password
+
+// Setup Nodemailer Transporter
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: EMAIL_USER,
+        pass: EMAIL_PASS,
+    }
+});
+
+// Helper to send email
+async function notifyAdminDistance(userId, distanceKm) {
+    if (!EMAIL_USER || EMAIL_USER.includes('YOUR_GMAIL')) return; // Skip if config is not set
+
+    const mailOptions = {
+        from: EMAIL_USER,
+        to: EMAIL_USER, // sending it to admin's own mail
+        subject: `📍 Trackr Alert: ${userId} has stopped sharing location`,
+        html: `
+            <h2>Tracking Report</h2>
+            <p><strong>User:</strong> ${userId}</p>
+            <p><strong>Total Distance Traveled:</strong> ${distanceKm.toFixed(3)} km</p>
+            <p>Time of completion: ${new Date().toLocaleString()}</p>
+        `
+    };
+
+    try {
+        await transporter.sendMail(mailOptions);
+        console.log(`Email sent for ${userId} traveled ${distanceKm.toFixed(3)} km`);
+    } catch (error) {
+        console.error('Error sending email:', error);
+    }
+}
 
 // Calculate distance between two points in km using Haversine formula
 function calculateDistance(lat1, lon1, lat2, lon2) {
     const R = 6371; // Earth's radius in km
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = 
-        Math.sin(dLat/2) * Math.sin(dLat/2) +
-        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-        Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
 }
 
@@ -42,7 +79,10 @@ io.on('connection', (socket) => {
     socket.on('update_location', (data) => {
         const { userId, lat, lng, timestamp } = data;
         let userData = activeUsers.get(userId) || { userId, distance: 0, lat, lng, lastLat: null, lastLng: null, history: [] };
-        
+
+        // Bind socket id to user to track when they disconnect
+        socketToUser.set(socket.id, userId);
+
         // Update distance if history > 0
         if (userData.lastLat !== null && userData.lastLng !== null) {
             const distSq = calculateDistance(userData.lastLat, userData.lastLng, lat, lng);
@@ -69,7 +109,20 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         console.log('User disconnected: ' + socket.id);
-        // We could clean up inactive users after some time if we want
+
+        // Find if this disconnect was a tracked user
+        const userId = socketToUser.get(socket.id);
+        if (userId) {
+            const userData = activeUsers.get(userId);
+            if (userData) {
+                console.log(`Sending summary email for ${userId} with distance ${userData.distance} km`);
+                notifyAdminDistance(userId, userData.distance);
+                // We wipe out their distance history so next time it starts from 0 (optional)
+                activeUsers.delete(userId);
+            }
+            socketToUser.delete(socket.id);
+            console.log(`Cleaned up user ${userId}`);
+        }
     });
 });
 
