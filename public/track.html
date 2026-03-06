@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trackr - Live Tracking</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+
+<body>
+
+    <div class="glass-panel" style="max-width: 400px; text-align: center;">
+        <h1>Live Tracking Active</h1>
+        <p>Your location is being shared with the Admin securely.</p>
+
+        <div class="tracker-status">
+            <div class="status-indicator active" id="indicator"></div>
+            <span id="statusText" style="color: var(--accent); font-weight: bold;">Transmitting...</span>
+        </div>
+
+        <div style="margin-top: 2rem; color: var(--text-muted); font-size: 0.85rem;" id="logs">
+            Waiting for GPS fix...
+        </div>
+
+        <button onclick="stopTracking()" class="btn" style="background: var(--danger); margin-top: 2rem;">Stop Sharing
+            Location</button>
+    </div>
+
+    <script>
+        const socket = io();
+        const urlParams = new URLSearchParams(window.location.search);
+        const userId = urlParams.get('userId') || 'unknown';
+        const logs = document.getElementById('logs');
+
+        let watchId = null;
+
+        if (navigator.geolocation) {
+            watchId = navigator.geolocation.watchPosition(
+                (position) => {
+                    const { latitude, longitude } = position.coords;
+
+                    socket.emit('update_location', {
+                        userId: userId,
+                        lat: latitude,
+                        lng: longitude,
+                        timestamp: new Date().toISOString()
+                    });
+
+                    logs.innerHTML = `Lat: ${latitude.toFixed(5)} <br> Lng: ${longitude.toFixed(5)} <br> Updated: ${new Date().toLocaleTimeString()}`;
+                },
+                (error) => {
+                    console.error("Error getting location", error);
+                    logs.innerHTML = '<span style="color: #ef4444;">Error accessing GPS. Please enable location permissions.</span>';
+                    document.getElementById('indicator').classList.remove('active');
+                    document.getElementById('indicator').style.background = '#ef4444';
+                    document.getElementById('statusText').innerText = 'Error';
+                    document.getElementById('statusText').style.color = '#ef4444';
+                },
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+            );
+        } else {
+            logs.innerHTML = "Geolocation is not supported by this browser.";
+        }
+
+        function stopTracking() {
+            if (watchId) navigator.geolocation.clearWatch(watchId);
+            document.getElementById('indicator').classList.remove('active');
+            document.getElementById('indicator').style.background = '#94a3b8';
+            document.getElementById('statusText').innerText = 'Stopped';
+            document.getElementById('statusText').style.color = '#94a3b8';
+            socket.disconnect();
+            logs.innerHTML = "Location sharing has been stopped.";
+        }
+    </script>
+
+</body>
+
+</html>
